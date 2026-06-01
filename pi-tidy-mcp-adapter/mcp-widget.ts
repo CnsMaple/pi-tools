@@ -20,6 +20,7 @@ let panelActive = false;
 let panelInstance: any = null;
 let currentCtx: ExtensionCommandContext | null = null;
 let terminalHandlerRegistered = false;
+let tuiRequestRender: (() => void) | null = null;
 
 function ensureTerminalHandler(ctx: ExtensionCommandContext): void {
   if (terminalHandlerRegistered) return;
@@ -46,6 +47,8 @@ function ensureTerminalHandler(ctx: ExtensionCommandContext): void {
     }
 
     panelInstance.handleInput(data);
+    // widget 不会像 overlay 那样自动重绘，需要手动触发
+    tuiRequestRender?.();
     return { consume: true };
   });
 }
@@ -55,6 +58,7 @@ function closeWidget(): void {
   panelActive = false;
   panelInstance?.dispose();
   panelInstance = null;
+  tuiRequestRender = null;
   currentCtx?.ui.setWidget(WIDGET_KEY, undefined);
 }
 
@@ -107,7 +111,7 @@ export async function toggleMcpWidget(
 
   panelInstance = new McpPanel(
     config, cache, provenanceMap, callbacks,
-    { requestRender: () => {} },
+    { requestRender: () => tuiRequestRender?.() },
     (result: McpPanelResult) => {
       // panel 主动关闭（超时、discard 等）
       if (!result.cancelled && (result.changes.size > 0 || result.disabledToolsChanges.size > 0)) {
@@ -126,11 +130,14 @@ export async function toggleMcpWidget(
 
   ctx.ui.setWidget(
     WIDGET_KEY,
-    (_tui, _theme) => ({
-      render: (width: number) => panelInstance!.render(width),
-      invalidate: () => {},
-      dispose: () => closeWidget(),
-    }),
+    (tui, _theme) => {
+      tuiRequestRender = () => tui.requestRender();
+      return {
+        render: (width: number) => panelInstance!.render(width),
+        invalidate: () => { tuiRequestRender = null; },
+        dispose: () => closeWidget(),
+      };
+    },
     { placement: "aboveEditor" },
   );
 }
