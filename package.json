@@ -10,11 +10,15 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
+    "@modelcontextprotocol/ext-apps": "^1.2.2",
     "typebox": "^1.1.36",
     "@earendil-works/pi-tui": "^0.77.0",
+    "@earendil-works/pi-ai": "^0.74.0",
     "wreq-js": "^2.3.1",
     "defuddle": "^0.18.1",
-    "linkedom": "^0.18.12"
+    "linkedom": "^0.18.12",
+    "open": "^10.2.0",
+    "recheck": "^4.5.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"

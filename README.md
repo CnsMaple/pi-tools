@@ -6,7 +6,7 @@
 
 | 模块 | 出处 | 说明 | 加载方式 |
 |------|------|------|---------|
-| [pi-tidy-mcp-adapter](https://github.com/vandeefeng/pi-mcp-adapter) | [npm](https://www.npmjs.com/package/pi-tidy-mcp-adapter) | MCP (Model Context Protocol) 适配器，管理 MCP 服务器连接与工具代理 | 同步 |
+| [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter) | [npm](https://www.npmjs.com/package/pi-mcp-adapter) | MCP (Model Context Protocol) 适配器，管理 MCP 服务器连接与工具代理 | 同步 |
 | [pi-cache-optimizer](https://github.com/jiangge/pi-cache-optimizer) | [npm](https://www.npmjs.com/package/pi-cache-optimizer) | 缓存优化，重排 system prompt 提高缓存命中率 | 同步 |
 | [pi-plan-mode](https://github.com/narumiruna/pi-extensions) | [npm](https://www.npmjs.com/package/@narumitw/pi-plan-mode) | Codex 风格只读计划模式 (`/plan` 命令) | 同步 |
 | [pi-retry](https://github.com/georgebashi/pi-retry) | [npm](https://www.npmjs.com/package/@georgebashi/pi-retry) | 自动重试流式错误 + 手动 `/retry` 命令 | 同步 |

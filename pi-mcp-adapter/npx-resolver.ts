@@ -1,12 +1,11 @@
 // npx-resolver.ts - Resolve npx/npm exec binaries to avoid npm parent processes
 import { existsSync, readFileSync, realpathSync, readdirSync, statSync, writeFileSync, renameSync, mkdirSync, openSync, readSync, closeSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, dirname, extname, resolve, sep } from "node:path";
+import { getAgentPath } from "./agent-dir.ts";
 import { spawn, spawnSync } from "node:child_process";
 
 const CACHE_VERSION = 1;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const CACHE_PATH = join(homedir(), ".pi", "agent", "mcp-npx-cache.json");
 
 interface NpxCacheEntry {
   resolvedBin: string;
@@ -34,11 +33,8 @@ interface ParsedInvocation {
 
 export async function resolveNpxBinary(
   command: string,
-  args: string[],
-  signal?: AbortSignal
+  args: string[]
 ): Promise<NpxResolution | null> {
-  if (signal?.aborted) return null;
-
   const parsed = command === "npx"
     ? parseNpxArgs(args)
     : command === "npm"
@@ -62,14 +58,7 @@ export async function resolveNpxBinary(
   }
 
   // Slow path: force npx cache population
-  try {
-    await forceNpxCache(parsed.packageSpec, signal);
-  } catch {
-    // Ignore abort/errors, resolution will fall back to original command
-  }
-  
-  if (signal?.aborted) return null;
-  
+  await forceNpxCache(parsed.packageSpec);
   const resolvedAfterInstall = resolveFromNpmCache(parsed.packageSpec, parsed.binName);
   if (resolvedAfterInstall) {
     saveCacheEntry(cacheKey, resolvedAfterInstall);
@@ -239,35 +228,25 @@ function resolveFromNpmCache(packageSpec: string, binName?: string): NpxCacheEnt
 
 const FORCE_CACHE_TIMEOUT_MS = 30_000;
 
-async function forceNpxCache(packageSpec: string, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return;
-
-  let proc: ReturnType<typeof spawn> | undefined;
-
-  const abortHandler = () => {
-    if (proc) {
-      try { proc.kill(); } catch { /* ignore */ }
-    }
-  };
-
-  if (signal) {
-    signal.addEventListener("abort", abortHandler, { once: true });
+async function forceNpxCache(packageSpec: string): Promise<void> {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(
+        "npm",
+        ["exec", "--yes", "--package", packageSpec, "--", "node", "-e", "1"],
+        { stdio: "ignore" }
+      );
+      const timer = setTimeout(() => {
+        proc.kill();
+        reject(new Error("timeout"));
+      }, FORCE_CACHE_TIMEOUT_MS);
+      timer.unref();
+      proc.on("close", () => { clearTimeout(timer); resolve(); });
+      proc.on("error", (err) => { clearTimeout(timer); reject(err); });
+    });
+  } catch {
+    // Ignore failures, resolution will fall back to original command
   }
-
-  await new Promise<void>((resolve, reject) => {
-    proc = spawn(
-      "npm",
-      ["exec", "--yes", "--package", packageSpec, "--", "node", "-e", "1"],
-      { stdio: "ignore" }
-    );
-    const timer = setTimeout(() => {
-      proc.kill();
-      reject(new Error("timeout"));
-    }, FORCE_CACHE_TIMEOUT_MS);
-    timer.unref();
-    proc.on("close", () => { clearTimeout(timer); resolve(); });
-    proc.on("error", (err) => { clearTimeout(timer); reject(err); });
-  });
 }
 
 function buildBinCandidates(packageName: string, explicitBin?: string): string[] {
@@ -387,10 +366,15 @@ function getNpmCacheDir(): string | null {
   return null;
 }
 
+function getNpxCachePath(): string {
+  return getAgentPath("mcp-npx-cache.json");
+}
+
 function loadCache(): NpxCache | null {
-  if (!existsSync(CACHE_PATH)) return null;
+  const cachePath = getNpxCachePath();
+  if (!existsSync(cachePath)) return null;
   try {
-    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+    const raw = JSON.parse(readFileSync(cachePath, "utf-8"));
     if (!raw || typeof raw !== "object") return null;
     if (raw.version !== CACHE_VERSION) return null;
     if (!raw.entries || typeof raw.entries !== "object") return null;
@@ -401,13 +385,14 @@ function loadCache(): NpxCache | null {
 }
 
 function saveCacheEntry(key: string, entry: NpxCacheEntry): void {
-  const dir = dirname(CACHE_PATH);
+  const cachePath = getNpxCachePath();
+  const dir = dirname(cachePath);
   mkdirSync(dir, { recursive: true });
 
   let merged: NpxCache = { version: CACHE_VERSION, entries: {} };
   try {
-    if (existsSync(CACHE_PATH)) {
-      const existing = JSON.parse(readFileSync(CACHE_PATH, "utf-8")) as NpxCache;
+    if (existsSync(cachePath)) {
+      const existing = JSON.parse(readFileSync(cachePath, "utf-8")) as NpxCache;
       if (existing && existing.version === CACHE_VERSION && existing.entries) {
         merged.entries = { ...existing.entries };
       }
@@ -417,9 +402,9 @@ function saveCacheEntry(key: string, entry: NpxCacheEntry): void {
   }
 
   merged.entries[key] = entry;
-  const tmpPath = `${CACHE_PATH}.${process.pid}.tmp`;
+  const tmpPath = `${cachePath}.${process.pid}.tmp`;
   writeFileSync(tmpPath, JSON.stringify(merged, null, 2), "utf-8");
-  renameSync(tmpPath, CACHE_PATH);
+  renameSync(tmpPath, cachePath);
 }
 
 function safeRealpath(path: string): string {

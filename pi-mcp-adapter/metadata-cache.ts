@@ -1,20 +1,23 @@
 // metadata-cache.ts - Persistent MCP metadata cache
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
+import { getAgentPath } from "./agent-dir.ts";
 import { createHash } from "node:crypto";
-import type { McpTool, McpResource, ServerEntry, ToolMetadata } from "./types.js";
-import { formatToolName } from "./types.js";
-import { resourceNameToToolName } from "./resource-tools.js";
+import { getToolUiResourceUri } from "@modelcontextprotocol/ext-apps/app-bridge";
+import type { McpTool, McpResource, ServerEntry, ToolMetadata } from "./types.ts";
+import { formatToolName, isToolExcluded } from "./types.ts";
+import { resourceNameToToolName } from "./resource-tools.ts";
+import { extractToolUiStreamMode, interpolateEnvRecord, resolveBearerToken, resolveConfigPath } from "./utils.ts";
 
 const CACHE_VERSION = 1;
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const CACHE_PATH = join(homedir(), ".pi", "agent", "mcp-cache.json");
 
 export interface CachedTool {
   name: string;
   description?: string;
   inputSchema?: unknown;
+  uiResourceUri?: string;
+  uiStreamMode?: "eager" | "stream-first";
 }
 
 export interface CachedResource {
@@ -36,13 +39,14 @@ export interface MetadataCache {
 }
 
 export function getMetadataCachePath(): string {
-  return CACHE_PATH;
+  return getAgentPath("mcp-cache.json");
 }
 
 export function loadMetadataCache(): MetadataCache | null {
-  if (!existsSync(CACHE_PATH)) return null;
+  const cachePath = getMetadataCachePath();
+  if (!existsSync(cachePath)) return null;
   try {
-    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+    const raw = JSON.parse(readFileSync(cachePath, "utf-8"));
     if (!raw || typeof raw !== "object") return null;
     if (raw.version !== CACHE_VERSION) return null;
     if (!raw.servers || typeof raw.servers !== "object") return null;
@@ -53,13 +57,14 @@ export function loadMetadataCache(): MetadataCache | null {
 }
 
 export function saveMetadataCache(cache: MetadataCache): void {
-  const dir = dirname(CACHE_PATH);
+  const cachePath = getMetadataCachePath();
+  const dir = dirname(cachePath);
   mkdirSync(dir, { recursive: true });
 
   let merged: MetadataCache = { version: CACHE_VERSION, servers: {} };
   try {
-    if (existsSync(CACHE_PATH)) {
-      const existing = JSON.parse(readFileSync(CACHE_PATH, "utf-8")) as MetadataCache;
+    if (existsSync(cachePath)) {
+      const existing = JSON.parse(readFileSync(cachePath, "utf-8")) as MetadataCache;
       if (existing && existing.version === CACHE_VERSION && existing.servers) {
         merged.servers = { ...existing.servers };
       }
@@ -71,9 +76,9 @@ export function saveMetadataCache(cache: MetadataCache): void {
   merged.version = CACHE_VERSION;
   merged.servers = { ...merged.servers, ...cache.servers };
 
-  const tmpPath = `${CACHE_PATH}.${process.pid}.tmp`;
+  const tmpPath = `${cachePath}.${process.pid}.tmp`;
   writeFileSync(tmpPath, JSON.stringify(merged, null, 2), "utf-8");
-  renameSync(tmpPath, CACHE_PATH);
+  renameSync(tmpPath, cachePath);
 }
 
 export function computeServerHash(definition: ServerEntry): string {
@@ -83,14 +88,15 @@ export function computeServerHash(definition: ServerEntry): string {
   const identity: Record<string, unknown> = {
     command: definition.command,
     args: definition.args,
-    env: definition.env,
-    cwd: definition.cwd,
+    env: interpolateEnvRecord(definition.env),
+    cwd: resolveConfigPath(definition.cwd),
     url: definition.url,
-    headers: definition.headers,
+    headers: interpolateEnvRecord(definition.headers),
     auth: definition.auth,
-    bearerToken: definition.bearerToken,
+    bearerToken: resolveBearerToken(definition),
     bearerTokenEnv: definition.bearerTokenEnv,
     exposeResources: definition.exposeResources,
+    excludeTools: definition.excludeTools,
   };
   const normalized = stableStringify(identity);
   return createHash("sha256").update(normalized).digest("hex");
@@ -111,24 +117,34 @@ export function reconstructToolMetadata(
   serverName: string,
   entry: ServerCacheEntry,
   prefix: "server" | "none" | "short",
-  exposeResources?: boolean
+  definition: Pick<ServerEntry, "exposeResources" | "excludeTools">
 ): ToolMetadata[] {
   const metadata: ToolMetadata[] = [];
 
   for (const tool of entry.tools ?? []) {
     if (!tool?.name) continue;
+    if (isToolExcluded(tool.name, serverName, prefix, definition.excludeTools)) {
+      continue;
+    }
+
     metadata.push({
       name: formatToolName(tool.name, serverName, prefix),
       originalName: tool.name,
       description: tool.description ?? "",
       inputSchema: tool.inputSchema,
+      uiResourceUri: tool.uiResourceUri,
+      uiStreamMode: tool.uiStreamMode,
     });
   }
 
-  if (exposeResources !== false) {
+  if (definition.exposeResources !== false) {
     for (const resource of entry.resources ?? []) {
       if (!resource?.name || !resource?.uri) continue;
       const baseName = `get_${resourceNameToToolName(resource.name)}`;
+      if (isToolExcluded(baseName, serverName, prefix, definition.excludeTools)) {
+        continue;
+      }
+
       metadata.push({
         name: formatToolName(baseName, serverName, prefix),
         originalName: baseName,
@@ -148,6 +164,8 @@ export function serializeTools(tools: McpTool[]): CachedTool[] {
       name: t.name,
       description: t.description,
       inputSchema: t.inputSchema,
+      uiResourceUri: tryGetToolUiResourceUri(t),
+      uiStreamMode: extractToolUiStreamMode(t._meta),
     }));
 }
 
@@ -172,4 +190,12 @@ function stableStringify(value: unknown): string {
   const obj = value as Record<string, unknown>;
   const keys = Object.keys(obj).sort();
   return `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
+}
+
+function tryGetToolUiResourceUri(tool: McpTool): string | undefined {
+  try {
+    return getToolUiResourceUri({ _meta: tool._meta });
+  } catch {
+    return undefined;
+  }
 }
