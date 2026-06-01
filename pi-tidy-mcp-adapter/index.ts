@@ -5,7 +5,7 @@ import { Text } from "@mariozechner/pi-tui";
 import { Type } from "typebox";
 import { existsSync } from "node:fs";
 import { loadMcpConfig, getServerProvenance, writeMcpToolsConfig } from "./config.js";
-import { formatToolName, getServerPrefix, type McpConfig, type McpContent, type ToolMetadata, type McpTool, type McpResource, type ServerEntry, type DirectToolSpec, type McpPanelCallbacks, type McpPanelResult } from "./types.js";
+import { formatToolName, getServerPrefix, type McpConfig, type McpContent, type ToolMetadata, type McpTool, type McpResource, type ServerEntry, type DirectToolSpec } from "./types.js";
 import { McpServerManager } from "./server-manager.js";
 import { McpLifecycleManager } from "./lifecycle.js";
 import { transformMcpContent } from "./tool-registrar.js";
@@ -495,11 +495,7 @@ function renderMcpToolResult(
                     case "status":
                     case "":
                     default:
-                        if (ctx.hasUI) {
-                            await openMcpPanel(state, pi, ctx, earlyConfigPath);
-                        } else {
-                            await showStatus(state, ctx);
-                        }
+                        await showStatus(state, ctx);
                         break;
                 }
             },
@@ -1732,59 +1728,7 @@ function renderMcpToolResult(
         );
     }
 
-    async function openMcpPanel(
-        state: McpExtensionState,
-        pi: ExtensionAPI,
-        ctx: ExtensionContext,
-        configOverridePath?: string,
-    ): Promise<void> {
-        const config = state.config;
-        const cache = loadMetadataCache();
-        const provenanceMap = getServerProvenance(pi.getFlag("mcp-config") as string | undefined ?? configOverridePath);
 
-        const callbacks: McpPanelCallbacks = {
-            reconnect: async (serverName: string) => {
-                return lazyConnect(state, serverName);
-            },
-            cancelConnect: (serverName: string) => {
-                state.manager.cancelConnect(serverName);
-            },
-            getConnectionStatus: (serverName: string) => {
-                const definition = config.mcpServers[serverName];
-                if (definition?.auth === "oauth" && getStoredTokens(serverName) === undefined) {
-                    return "needs-auth";
-                }
-                if (state.manager.isConnecting(serverName)) return "connecting";
-                const connection = state.manager.getConnection(serverName);
-                if (connection?.status === "connected") return "connected";
-                if (getFailureAgeSeconds(state, serverName) !== null) return "failed";
-                return "idle";
-            },
-            refreshCacheAfterReconnect: (serverName: string) => {
-                const freshCache = loadMetadataCache();
-                return freshCache?.servers?.[serverName] ?? null;
-            },
-            getFailureRetryAfterSeconds: (serverName: string) => {
-                return getFailureRetryAfterSeconds(state, serverName);
-            },
-        };
-
-        const { createMcpPanel } = await import("./mcp-panel.js");
-
-        await ctx.ui.custom(
-            (tui, _theme, _keybindings, done) => {
-                return createMcpPanel(config, cache, provenanceMap, callbacks, tui, (result: McpPanelResult) => {
-                    if (!result.cancelled) {
-                        if (result.changes.size > 0 || result.disabledToolsChanges.size > 0) {
-                            writeMcpToolsConfig(result.changes, result.disabledToolsChanges, provenanceMap, config);
-                            ctx.ui.notify("Tools config updated. Restart pi to apply.", "info");
-                        }
-                    }
-                    done();
-                });
-            },
-        );
-    }
 
     /**
      * Truncate text at word boundary, aiming for target length.
