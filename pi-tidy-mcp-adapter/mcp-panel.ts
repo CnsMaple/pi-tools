@@ -107,7 +107,7 @@ interface VisibleItem {
   toolIndex?: number;
 }
 
-class McpPanel {
+export class McpPanel {
   private servers: ServerState[] = [];
   private cursorIndex = 0;
   private nameQuery = "";

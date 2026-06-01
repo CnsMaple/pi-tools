@@ -1735,59 +1735,15 @@ function renderMcpToolResult(
     async function openMcpPanel(
         state: McpExtensionState,
         pi: ExtensionAPI,
-        ctx: ExtensionContext,
+        ctx: ExtensionCommandContext,
         configOverridePath?: string,
     ): Promise<void> {
         const config = state.config;
         const cache = loadMetadataCache();
         const provenanceMap = getServerProvenance(pi.getFlag("mcp-config") as string | undefined ?? configOverridePath);
 
-        const callbacks: McpPanelCallbacks = {
-            reconnect: async (serverName: string) => {
-                return lazyConnect(state, serverName);
-            },
-            cancelConnect: (serverName: string) => {
-                state.manager.cancelConnect(serverName);
-            },
-            getConnectionStatus: (serverName: string) => {
-                const definition = config.mcpServers[serverName];
-                if (definition?.auth === "oauth" && getStoredTokens(serverName) === undefined) {
-                    return "needs-auth";
-                }
-                if (state.manager.isConnecting(serverName)) return "connecting";
-                const connection = state.manager.getConnection(serverName);
-                if (connection?.status === "connected") return "connected";
-                if (getFailureAgeSeconds(state, serverName) !== null) return "failed";
-                return "idle";
-            },
-            refreshCacheAfterReconnect: (serverName: string) => {
-                const freshCache = loadMetadataCache();
-                return freshCache?.servers?.[serverName] ?? null;
-            },
-            getFailureRetryAfterSeconds: (serverName: string) => {
-                return getFailureRetryAfterSeconds(state, serverName);
-            },
-        };
-
-        const { createMcpPanel } = await import("./mcp-panel.js");
-
-        return new Promise<void>((resolve) => {
-            ctx.ui.custom(
-                (tui, _theme, _keybindings, done) => {
-                    return createMcpPanel(config, cache, provenanceMap, callbacks, tui, (result: McpPanelResult) => {
-                        if (!result.cancelled) {
-                            if (result.changes.size > 0 || result.disabledToolsChanges.size > 0) {
-                                writeMcpToolsConfig(result.changes, result.disabledToolsChanges, provenanceMap, config);
-                                ctx.ui.notify("Tools config updated. Restart pi to apply.", "info");
-                            }
-                        }
-                        done();
-                        resolve();
-                    });
-                },
-                { overlay: true, overlayOptions: { anchor: "center", width: 82 } },
-            );
-        });
+        const { toggleMcpWidget } = await import("./mcp-widget.js");
+        await toggleMcpWidget(pi, ctx, state, config, cache, provenanceMap);
     }
 
     /**
