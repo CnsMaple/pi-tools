@@ -4,7 +4,7 @@ import type { ExtensionAPI, ExtensionContext, Theme, ToolInfo } from "@mariozech
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "typebox";
 import { existsSync } from "node:fs";
-import { loadMcpConfig, getServerProvenance, writeMcpToolsConfig } from "./config.js";
+import { loadMcpConfig, getServerProvenance } from "./config.js";
 import { formatToolName, getServerPrefix, type McpConfig, type McpContent, type ToolMetadata, type McpTool, type McpResource, type ServerEntry, type DirectToolSpec } from "./types.js";
 import { McpServerManager } from "./server-manager.js";
 import { McpLifecycleManager } from "./lifecycle.js";

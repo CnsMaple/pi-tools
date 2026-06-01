@@ -121,20 +121,6 @@ export interface ServerProvenance {
   importKind?: string;
 }
 
-export interface McpPanelCallbacks {
-  reconnect: (serverName: string) => Promise<boolean>;
-  cancelConnect: (serverName: string) => void;
-  getConnectionStatus: (serverName: string) => "connected" | "idle" | "failed" | "needs-auth" | "connecting";
-  refreshCacheAfterReconnect: (serverName: string) => import("./metadata-cache.js").ServerCacheEntry | null;
-  getFailureRetryAfterSeconds: (serverName: string) => number | null;
-}
-
-export interface McpPanelResult {
-  changes: Map<string, true | string[] | false>;
-  disabledToolsChanges: Map<string, string[]>;
-  cancelled: boolean;
-}
-
 /**
  * Get server prefix based on tool prefix mode.
  */
