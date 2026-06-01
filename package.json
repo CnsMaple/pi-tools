@@ -12,7 +12,6 @@
     "@modelcontextprotocol/sdk": "^1.25.1",
     "typebox": "^1.1.36",
     "@earendil-works/pi-tui": "^0.77.0",
-    "@sinclair/typebox": "^0.34.49",
     "wreq-js": "^2.3.1",
     "defuddle": "^0.18.1",
     "linkedom": "^0.18.12"

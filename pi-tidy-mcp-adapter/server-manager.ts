@@ -1,14 +1,13 @@
 // server-manager.ts - MCP connection management (stdio + HTTP)
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import type { McpTool, McpResource, ServerDefinition, Transport } from "./types.js";
+// SDK imports are lazy to avoid loading 5.6MB @modelcontextprotocol/sdk at startup
+import type { McpTool, McpResource, ServerDefinition } from "./types.js";
 import { getStoredTokens } from "./oauth-handler.js";
 import { resolveNpxBinary } from "./npx-resolver.js";
 
+type Transport = any;
+
 interface ServerConnection {
-  client: Client;
+  client: any;
   transport: Transport;
   definition: ServerDefinition;
   tools: McpTool[];
@@ -16,6 +15,16 @@ interface ServerConnection {
   lastUsedAt: number;
   inFlight: number;
   status: "connected" | "closed";
+}
+
+// Lazy SDK module cache — loaded on first MCP connection
+const _sdkCache = new Map<string, any>();
+
+async function lazySdk<T>(path: string): Promise<T> {
+  if (!_sdkCache.has(path)) {
+    _sdkCache.set(path, import(path).catch(e => { _sdkCache.delete(path); throw e; }));
+  }
+  return _sdkCache.get(path);
 }
 
 export class McpServerManager {
@@ -88,6 +97,14 @@ export class McpServerManager {
       throw new Error(`Connection to ${name} cancelled`);
     }
 
+    // Lazy-load MCP SDK modules (loaded only when a connection is actually made)
+    const [{ Client }, { StdioClientTransport }, httpMod, sseMod] = await Promise.all([
+      lazySdk<typeof import("@modelcontextprotocol/sdk/client/index.js")>("@modelcontextprotocol/sdk/client/index.js"),
+      lazySdk<typeof import("@modelcontextprotocol/sdk/client/stdio.js")>("@modelcontextprotocol/sdk/client/stdio.js"),
+      lazySdk<typeof import("@modelcontextprotocol/sdk/client/streamableHttp.js")>("@modelcontextprotocol/sdk/client/streamableHttp.js"),
+      lazySdk<typeof import("@modelcontextprotocol/sdk/client/sse.js")>("@modelcontextprotocol/sdk/client/sse.js"),
+    ]);
+
     const client = new Client({ name: `pi-mcp-${name}`, version: "1.0.0" });
 
     let transport: Transport;
@@ -117,7 +134,7 @@ export class McpServerManager {
       });
     } else if (definition.url) {
       // HTTP transport with fallback
-      transport = await this.createHttpTransport(definition, name, signal);
+      transport = await this.createHttpTransport(definition, name, signal, httpMod.StreamableHTTPClientTransport, sseMod.SSEClientTransport, Client);
     } else {
       throw new Error(`Server ${name} has no command or url`);
     }
@@ -175,7 +192,14 @@ export class McpServerManager {
     }
   }
   
-  private async createHttpTransport(definition: ServerDefinition, serverName?: string, signal?: AbortSignal): Promise<Transport> {
+  private async createHttpTransport(
+    definition: ServerDefinition,
+    serverName: string | undefined,
+    signal: AbortSignal | undefined,
+    StreamableHTTPClientTransport: any,
+    SSEClientTransport: any,
+    Client: any,
+  ): Promise<Transport> {
     const url = new URL(definition.url!);
     const headers = resolveHeaders(definition.headers) ?? {};
 
@@ -236,7 +260,7 @@ export class McpServerManager {
     }
   }
   
-  private async fetchAllTools(client: Client, signal?: AbortSignal): Promise<McpTool[]> {
+  private async fetchAllTools(client: any, signal?: AbortSignal): Promise<McpTool[]> {
     const allTools: McpTool[] = [];
     let cursor: string | undefined;
 
@@ -245,120 +269,74 @@ export class McpServerManager {
       const result = await client.listTools(cursor ? { cursor } : undefined, { signal });
       allTools.push(...(result.tools ?? []));
       cursor = result.nextCursor;
-    } while (cursor && !signal?.aborted);
+    } while (cursor);
 
     return allTools;
   }
 
-  private async fetchAllResources(client: Client, signal?: AbortSignal): Promise<McpResource[]> {
-    try {
-      const allResources: McpResource[] = [];
-      let cursor: string | undefined;
+  private async fetchAllResources(client: any, signal?: AbortSignal): Promise<McpResource[]> {
+    const allResources: McpResource[] = [];
+    let cursor: string | undefined;
 
-      do {
-        if (signal?.aborted) throw new Error("Connection cancelled");
-        const result = await client.listResources(cursor ? { cursor } : undefined, { signal });
-        allResources.push(...(result.resources ?? []));
-        cursor = result.nextCursor;
-      } while (cursor && !signal?.aborted);
+    do {
+      if (signal?.aborted) throw new Error("Connection cancelled");
+      const result = await client.listResources(cursor ? { cursor } : undefined, { signal });
+      allResources.push(...(result.resources ?? []));
+      cursor = result.nextCursor;
+    } while (cursor);
 
-      return allResources;
-    } catch {
-      // Server may not support resources
-      return [];
-    }
+    return allResources;
   }
-  
+
+  getConnection(name: string): ServerConnection | undefined {
+    const connection = this.connections.get(name);
+    return connection?.status === "connected" ? connection : undefined;
+  }
+
+  getConnectedNames(): string[] {
+    return [...this.connections.entries()]
+      .filter(([, c]) => c.status === "connected")
+      .map(([n]) => n);
+  }
+
+  isIdle(name: string, idleMs: number): boolean {
+    const connection = this.connections.get(name);
+    if (!connection) return true;
+    return Date.now() - connection.lastUsedAt > idleMs;
+  }
+
   async close(name: string): Promise<void> {
     const connection = this.connections.get(name);
     if (!connection) return;
-    
-    // Delete from map BEFORE async cleanup to prevent a race where a
-    // concurrent connect() creates a new connection that our deferred
-    // delete() would then remove, orphaning the new server process.
-    connection.status = "closed";
+    try { await connection.client.close(); } catch { /* ignore */ }
+    try { await connection.transport.close(); } catch { /* ignore */ }
     this.connections.delete(name);
-    await connection.client.close().catch(() => {});
-    await connection.transport.close().catch(() => {});
   }
-  
+
   async closeAll(): Promise<void> {
     const names = [...this.connections.keys()];
-    await Promise.all(names.map(name => this.close(name)));
-  }
-  
-  getConnection(name: string): ServerConnection | undefined {
-    return this.connections.get(name);
-  }
-  
-  getAllConnections(): Map<string, ServerConnection> {
-    return new Map(this.connections);
+    await Promise.all(names.map(n => this.close(n)));
   }
 
-  touch(name: string): void {
-    const connection = this.connections.get(name);
-    if (connection) {
-      connection.lastUsedAt = Date.now();
-    }
-  }
-
-  incrementInFlight(name: string): void {
-    const connection = this.connections.get(name);
-    if (connection) {
-      connection.inFlight = (connection.inFlight ?? 0) + 1;
-    }
-  }
-
-  decrementInFlight(name: string): void {
-    const connection = this.connections.get(name);
-    if (connection && connection.inFlight) {
-      connection.inFlight--;
-    }
-  }
-
-  isIdle(name: string, timeoutMs: number): boolean {
-    const connection = this.connections.get(name);
-    if (!connection || connection.status !== "connected") return false;
-    if (connection.inFlight && connection.inFlight > 0) return false;
-    return (Date.now() - connection.lastUsedAt) > timeoutMs;
+  inFlightCount(name: string): number {
+    return this.connections.get(name)?.inFlight ?? 0;
   }
 }
 
-/**
- * Resolve environment variables with interpolation.
- */
 function resolveEnv(env?: Record<string, string>): Record<string, string> {
-  // Copy process.env, filtering out undefined values
+  if (!env) return {};
   const resolved: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) {
-      resolved[key] = value;
-    }
-  }
-  
-  if (!env) return resolved;
-  
   for (const [key, value] of Object.entries(env)) {
-    // Support ${VAR} and $env:VAR interpolation
-    resolved[key] = value
-      .replace(/\$\{(\w+)\}/g, (_, name) => process.env[name] ?? "")
-      .replace(/\$env:(\w+)/g, (_, name) => process.env[name] ?? "");
+    resolved[key] = value.replace(/\$\{([^}]+)\}/g, (_, name) => process.env[name] ?? "");
   }
-  
   return resolved;
 }
 
-/**
- * Resolve headers with environment variable interpolation.
- */
 function resolveHeaders(headers?: Record<string, string>): Record<string, string> | undefined {
-  if (!headers) return undefined;
-  
+  if (!headers || Object.keys(headers).length === 0) return undefined;
   const resolved: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
-    resolved[key] = value
-      .replace(/\$\{(\w+)\}/g, (_, name) => process.env[name] ?? "")
-      .replace(/\$env:(\w+)/g, (_, name) => process.env[name] ?? "");
+    resolved[key] = value.replace(/\$\{([^}]+)\}/g, (_, name) => process.env[name] ?? "");
   }
   return resolved;
 }

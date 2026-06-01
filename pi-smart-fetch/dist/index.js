@@ -1,6 +1,6 @@
 import { getAgentDir, getMarkdownTheme, keyText } from '@earendil-works/pi-coding-agent';
 import { Text, Container, Spacer, Markdown } from '@earendil-works/pi-tui';
-import { Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
 import { randomUUID } from 'crypto';
 import { once } from 'events';
 import { createWriteStream } from 'fs';

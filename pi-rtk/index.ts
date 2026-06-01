@@ -11,7 +11,7 @@ import {
 	isReadToolResult,
 	isGrepToolResult,
 } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { loadConfig, DEFAULT_CONFIG, type RtkConfig } from "./config";
 import { trackSavings, getMetricsSummary, clearMetrics } from "./metrics";
