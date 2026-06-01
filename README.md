@@ -14,33 +14,6 @@
 | [pi-smart-fetch](https://github.com/Thinkscape/agent-smart-fetch) | [npm](https://www.npmjs.com/package/pi-smart-fetch) | 智能 web_fetch，浏览器级 TLS 指纹模拟 + Defuddle 提取 | 懒加载（首次调用） |
 | [rpiv-todo](https://github.com/buihongduc132/rpiv-todo) | [npm](https://www.npmjs.com/package/rpiv-todo) | TUI 任务看板 (`todo` 工具 + 覆盖层) | 同步 |
 
-## 环境变量控制
-
-设置任意值即可禁用对应插件：
-
-```
-PI_NO_SMART_FETCH=1      跳过智能抓取（省 ~60MB 依赖）
-PI_NO_CACHE_OPTIMIZER=1  跳过缓存优化
-PI_NO_RTK=1              跳过 token 缩减
-PI_NO_PLAN_MODE=1        跳过计划模式
-PI_NO_RETRY=1            跳过自动重试
-PI_NO_TODO=1             跳过任务看板
-PI_NO_MCP=1              跳过 MCP 适配器
-```
-
-示例：
-
-```bash
-# 全部加载（默认）
-pi
-
-# 跳过最重的 smart-fetch
-PI_NO_SMART_FETCH=1 pi
-
-# 按需禁用多个
-PI_NO_SMART_FETCH=1 PI_NO_CACHE_OPTIMIZER=1 PI_NO_RTK=1 pi
-```
-
 ## 安装
 
 ```bash

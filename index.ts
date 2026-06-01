@@ -1,33 +1,15 @@
-/**
- * pi-tools — 统一入口，带按需懒加载优化
- *
- * 环境变量控制：
- *   PI_NO_SMART_FETCH=1     跳过智能抓取（省 54MB wreq-js + 4.5MB deps）
- *   PI_NO_CACHE_OPTIMIZER=1 跳过缓存优化（省每个请求的 prompt 改写开销）
- *   PI_NO_RTK=1             跳过 token 缩减（省每个 tool_result 的过滤开销）
- *   PI_NO_PLAN_MODE=1       跳过计划模式
- *   PI_NO_RETRY=1           跳过自动重试
- *   PI_NO_TODO=1            跳过任务看板
- *   PI_NO_MCP=1             跳过 MCP 适配器
- */
+/** pi-tools — 统一入口 */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
-// ── 轻量插件：直接加载 ──────────────────────────────────
-
 import mcpAdapter from "./pi-tidy-mcp-adapter/index.ts";
+import cacheOptimizer from "./pi-cache-optimizer/index.ts";
 import planMode from "./pi-plan-mode/src/plan-mode.ts";
 import piRetry from "./pi-retry/index.ts";
-import cacheOptimizer from "./pi-cache-optimizer/index.ts";
 import rtk from "./pi-rtk/index.ts";
 import todo from "./rpiv-todo/index.ts";
 
-// ── 重型插件（smart-fetch）：首次调用才载入 54MB wreq-js ────
-
 function lazySmartFetch(pi: ExtensionAPI): void {
-  if (process.env.PI_NO_SMART_FETCH) return;
-
-  // 首次调用时加载真实模块，用 stub pi 捕获真实 tool 定义后替换
   let realExecutes: Map<string, Function> | null = null;
   let loading: Promise<void> | null = null;
 
@@ -37,11 +19,9 @@ function lazySmartFetch(pi: ExtensionAPI): void {
       loading = (async () => {
         const mod = await import("./pi-smart-fetch/dist/index.js");
         const captures = new Map<string, any>();
-        // 给真实插件一个 stub pi，只捕获 registerTool 调用
         mod.default({
           registerTool: (def: any) => captures.set(def.name, def),
         });
-        // 用真实定义覆盖代理工具
         realExecutes = new Map();
         for (const [name, def] of captures) {
           realExecutes.set(name, def.execute);
@@ -53,7 +33,6 @@ function lazySmartFetch(pi: ExtensionAPI): void {
     return realExecutes!;
   }
 
-  // web_fetch 代理
   pi.registerTool({
     name: "web_fetch",
     label: "web_fetch",
@@ -88,7 +67,6 @@ function lazySmartFetch(pi: ExtensionAPI): void {
     },
   });
 
-  // batch_web_fetch 代理
   pi.registerTool({
     name: "batch_web_fetch",
     label: "batch_web_fetch",
@@ -135,17 +113,12 @@ function lazySmartFetch(pi: ExtensionAPI): void {
   });
 }
 
-// ── 入口 ────────────────────────────────────────────────
-
 export default function (pi: ExtensionAPI): void {
-  // 全部同步加载，必须在事件触发前完成 handler 注册
-  if (!process.env.PI_NO_MCP) mcpAdapter(pi);
-  if (!process.env.PI_NO_CACHE_OPTIMIZER) cacheOptimizer(pi);
-  if (!process.env.PI_NO_PLAN_MODE) planMode(pi);
-  if (!process.env.PI_NO_RETRY) piRetry(pi);
-  if (!process.env.PI_NO_RTK) rtk(pi);
-  if (!process.env.PI_NO_TODO) todo(pi);
-
-  // 重型插件（工具懒加载，首次调用才导入 54MB wreq-js）
+  mcpAdapter(pi);
+  cacheOptimizer(pi);
+  planMode(pi);
+  piRetry(pi);
+  rtk(pi);
+  todo(pi);
   lazySmartFetch(pi);
 }
