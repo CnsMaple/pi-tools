@@ -292,7 +292,7 @@ export async function openMcpSetup(
           resolve({ configChanged });
         });
       },
-      { overlay: true, overlayOptions: { anchor: "bottom", width: "100%", maxHeight: "60%" } },
+      { overlay: true, overlayOptions: { anchor: "bottom", width: 82 } },
     );
   });
 }
@@ -369,7 +369,7 @@ export async function openMcpPanel(
           resolve();
         }, { noticeLines });
       },
-      { overlay: true, overlayOptions: { anchor: "bottom", width: "100%", maxHeight: "60%" } },
+      { overlay: true, overlayOptions: { anchor: "bottom", width: 82 } },
     );
   });
 
@@ -412,7 +412,7 @@ export async function openMcpAuthPanel(
           noticeLines: ["Select an OAuth MCP server and press Enter or ctrl+a to authenticate."],
         });
       },
-      { overlay: true, overlayOptions: { anchor: "bottom", width: "100%", maxHeight: "60%" } },
+      { overlay: true, overlayOptions: { anchor: "bottom", width: 82 } },
     );
   });
 
