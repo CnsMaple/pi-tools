@@ -293,10 +293,35 @@ export class McpServerManager {
     return connection?.status === "connected" ? connection : undefined;
   }
 
+  getAllConnections(): Map<string, ServerConnection> {
+    return new Map(this.connections);
+  }
+
   getConnectedNames(): string[] {
     return [...this.connections.entries()]
       .filter(([, c]) => c.status === "connected")
       .map(([n]) => n);
+  }
+
+  touch(name: string): void {
+    const connection = this.connections.get(name);
+    if (connection) {
+      connection.lastUsedAt = Date.now();
+    }
+  }
+
+  incrementInFlight(name: string): void {
+    const connection = this.connections.get(name);
+    if (connection) {
+      connection.inFlight = (connection.inFlight ?? 0) + 1;
+    }
+  }
+
+  decrementInFlight(name: string): void {
+    const connection = this.connections.get(name);
+    if (connection && connection.inFlight) {
+      connection.inFlight--;
+    }
   }
 
   isIdle(name: string, idleMs: number): boolean {
