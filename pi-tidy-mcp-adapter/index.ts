@@ -467,10 +467,10 @@ function renderMcpToolResult(
         pi.registerCommand("mcp", {
             description: "Manage MCP servers (status, tools, reconnect)",
             getArgumentCompletions: (prefix: string) => [
-                { label: "status", description: "Show server status" },
-                { label: "tools", description: "List all tools" },
-                { label: "reconnect", description: "Reconnect to a server" },
-                { label: "help", description: "Show this help" },
+                { label: "status", value: "status", description: "Show server status" },
+                { label: "tools", value: "tools", description: "List all tools" },
+                { label: "reconnect", value: "reconnect ", description: "Reconnect to a server" },
+                { label: "help", value: "help", description: "Show this help" },
             ].filter(s => s.label.startsWith(prefix)),
             handler: async (args, ctx) => {
                 // Wait for init if still in progress
