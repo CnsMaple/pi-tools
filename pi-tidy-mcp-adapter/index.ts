@@ -492,10 +492,16 @@ function renderMcpToolResult(
                     case "tools":
                         await showTools(state, ctx);
                         break;
-                    case "status":
+                    case "help":
                     case "":
                     default:
-                        await showStatus(state, ctx);
+                        if (ctx.hasUI) {
+                            ctx.ui.notify(
+                                "MCP subcommands: status, tools, reconnect <name>, help\n" +
+                                "Or use mcp({ search, tool, connect }) in prompts.",
+                                "info",
+                            );
+                        }
                         break;
                 }
             },
