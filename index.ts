@@ -1,14 +1,8 @@
-/** pi-tools — 统一入口 */
+/** pi-tools — 统一入口（并行加载 + 懒加载优化） */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
-import mcpAdapter from "./pi-tidy-mcp-adapter/index.ts";
-import cacheOptimizer from "./pi-cache-optimizer/index.ts";
-import planMode from "./pi-plan-mode/src/plan-mode.ts";
-import piRetry from "./pi-retry/index.ts";
-import rtk from "./pi-rtk/index.ts";
-import todo from "./rpiv-todo/index.ts";
-
+// 智能抓取：代理工具注册，首次调用才载入 54MB wreq-js
 function lazySmartFetch(pi: ExtensionAPI): void {
   let realExecutes: Map<string, Function> | null = null;
   let loading: Promise<void> | null = null;
@@ -113,12 +107,25 @@ function lazySmartFetch(pi: ExtensionAPI): void {
   });
 }
 
-export default function (pi: ExtensionAPI): void {
-  mcpAdapter(pi);
-  cacheOptimizer(pi);
-  planMode(pi);
-  piRetry(pi);
-  rtk(pi);
-  todo(pi);
+export default async function (pi: ExtensionAPI): Promise<void> {
+  // 并行加载全部插件模块（它们之间无共享依赖，可同时解析）
+  const [mcpMod, cacheMod, planMod, retryMod, rtkMod, todoMod] = await Promise.all([
+    import("./pi-tidy-mcp-adapter/index.ts"),
+    import("./pi-cache-optimizer/index.ts"),
+    import("./pi-plan-mode/src/plan-mode.ts"),
+    import("./pi-retry/index.ts"),
+    import("./pi-rtk/index.ts"),
+    import("./rpiv-todo/index.ts"),
+  ]);
+
+  // 依次初始化（注册 hook/tool，执行很快）
+  mcpMod.default(pi);
+  cacheMod.default(pi);
+  planMod.default(pi);
+  retryMod.default(pi);
+  rtkMod.default(pi);
+  todoMod.default(pi);
+
+  // 智能抓取 — 首次调用才加载重型依赖
   lazySmartFetch(pi);
 }

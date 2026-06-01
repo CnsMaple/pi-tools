@@ -2,7 +2,6 @@
 // SDK imports are lazy to avoid loading 5.6MB @modelcontextprotocol/sdk at startup
 import type { McpTool, McpResource, ServerDefinition } from "./types.js";
 import { getStoredTokens } from "./oauth-handler.js";
-import { resolveNpxBinary } from "./npx-resolver.js";
 
 type Transport = any;
 
@@ -114,6 +113,7 @@ export class McpServerManager {
       let args = definition.args ?? [];
 
       if (command === "npx" || command === "npm") {
+        const { resolveNpxBinary } = await import("./npx-resolver.js");
         const resolved = await resolveNpxBinary(command, args, signal);
         if (resolved) {
           command = resolved.isJs ? "node" : resolved.binPath;
