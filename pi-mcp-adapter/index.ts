@@ -207,18 +207,18 @@ export default function mcpAdapter(pi: ExtensionAPI) {
           await logoutServer(serverName, state, ctx);
           break;
         }
-        case "panel": {
-          const result = await openMcpPanel(state, pi, ctx, earlyConfigPath);
-          if (result?.configChanged) {
-            await ctx.reload();
-            return;
-          }
-          break;
-        }
         case "status":
         case "":
         default:
-          await showStatus(state, ctx);
+          if (ctx.hasUI) {
+            const result = await openMcpPanel(state, pi, ctx, earlyConfigPath);
+            if (result?.configChanged) {
+              await ctx.reload();
+              return;
+            }
+          } else {
+            await showStatus(state, ctx);
+          }
           break;
       }
     },
