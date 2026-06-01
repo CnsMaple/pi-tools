@@ -32,6 +32,7 @@
 | 子命令自动补全 | `index.ts` | `/mcp ` + 空格弹出补全列表（原版无此功能） |
 | 面板布局精简 | `mcp-panel.ts` | 移除所有多余空行，只在统计行下方保留一行空白 |
 | 面板定位 | `commands.ts` | 改为 `left-center` 锚点，无固定宽高限制 |
+| 底部栏颜色统一 | `init.ts` | 移除 MCP 状态的 `accent` 颜色标记，与其他插件默认色一致 |
 
 ### pi-cache-optimizer（已修改）
 
