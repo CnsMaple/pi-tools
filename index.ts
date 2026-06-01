@@ -108,9 +108,11 @@ function lazySmartFetch(pi: ExtensionAPI): void {
 }
 
 export default async function (pi: ExtensionAPI): Promise<void> {
-  // 并行加载全部插件模块（它们之间无共享依赖，可同时解析）
-  const [mcpMod, cacheMod, planMod, retryMod, rtkMod, todoMod, contMod] = await Promise.all([
-    import("./pi-mcp-adapter/index.ts"),
+  // MCP 适配器（43 文件 10K 行）后台异步加载，不阻塞启动计时
+  import("./pi-mcp-adapter/index.ts").then(m => m.default(pi)).catch(() => {});
+
+  // 其余插件并行加载
+  const [cacheMod, planMod, retryMod, rtkMod, todoMod, contMod] = await Promise.all([
     import("./pi-cache-optimizer/index.ts"),
     import("./pi-plan-mode/src/plan-mode.ts"),
     import("./pi-retry/index.ts"),
@@ -119,8 +121,6 @@ export default async function (pi: ExtensionAPI): Promise<void> {
     import("./pi-continue/index.ts"),
   ]);
 
-  // 依次初始化（注册 hook/tool，执行很快）
-  mcpMod.default(pi);
   cacheMod.default(pi);
   planMod.default(pi);
   retryMod.default(pi);
