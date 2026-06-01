@@ -592,53 +592,22 @@ class McpPanel {
     const innerW = width - 2;
     const lines: string[] = [];
     const t = this.t;
-    const bold = (s: string) => `\x1b[1m${s}\x1b[22m`;
     const italic = (s: string) => `\x1b[3m${s}\x1b[23m`;
-    const inverse = (s: string) => `\x1b[7m${s}\x1b[27m`;
 
     const row = (content: string) =>
       fg(t.border, "│") + truncateToWidth(" " + content, innerW, "…", true) + fg(t.border, "│");
     const emptyRow = () => fg(t.border, "│") + " ".repeat(innerW) + fg(t.border, "│");
-    const divider = () => fg(t.border, "├" + "─".repeat(innerW) + "┤");
 
-    const titleText = this.authOnly ? " MCP OAuth " : " MCP Servers ";
-    const borderLen = innerW - visibleWidth(titleText);
-    const leftB = Math.floor(borderLen / 2);
-    const rightB = borderLen - leftB;
-    lines.push(fg(t.border, "╭" + "─".repeat(leftB)) + fg(t.title, titleText) + fg(t.border, "─".repeat(rightB) + "╮"));
-
-    lines.push(emptyRow());
-
-    const cursor = fg(t.selected, "│");
-    const searchIcon = fg(t.border, "◎");
-    if (this.descSearchActive) {
-      lines.push(row(`${searchIcon}  ${fg(t.needsAuth, "desc:")} ${this.descQuery}${cursor}`));
-    } else if (this.nameQuery) {
-      lines.push(row(`${searchIcon}  ${this.nameQuery}${cursor}`));
-    } else {
-      lines.push(row(`${searchIcon}  ${fg(t.placeholder, italic("search..."))}`));
-    }
-
-    lines.push(emptyRow());
-    if (this.noticeLines.length > 0) {
-      for (const notice of this.noticeLines) {
-        lines.push(row(fg(t.hint, italic(notice))));
-      }
-      lines.push(emptyRow());
-    }
-    lines.push(divider());
+    lines.push(fg(t.border, "╭" + "─".repeat(innerW) + "╮"));
 
     if (this.servers.length === 0) {
       lines.push(emptyRow());
-      lines.push(row(fg(t.hint, italic(this.authOnly ? "No OAuth-capable MCP servers configured." : "No MCP servers configured."))));
-      lines.push(emptyRow());
+      lines.push(row(fg(t.hint, italic("No MCP servers configured."))));
     } else {
       const maxVis = McpPanel.MAX_VISIBLE;
       const total = this.visibleItems.length;
       const startIdx = Math.max(0, Math.min(this.cursorIndex - Math.floor(maxVis / 2), total - maxVis));
       const endIdx = Math.min(startIdx + maxVis, total);
-
-      lines.push(emptyRow());
 
       for (let i = startIdx; i < endIdx; i++) {
         const item = this.visibleItems[i];
@@ -652,88 +621,21 @@ class McpPanel {
         }
       }
 
-      lines.push(emptyRow());
-
-      if (total > maxVis) {
-        const prog = Math.round(((this.cursorIndex + 1) / total) * 10);
-        lines.push(row(`${rainbowProgress(prog, 10)}  ${fg(t.hint, `${this.cursorIndex + 1}/${total}`)}`));
-        lines.push(emptyRow());
-      }
-
       if (this.importNotice) {
         lines.push(row(fg(t.needsAuth, italic(this.importNotice))));
-        lines.push(emptyRow());
-      }
-      if (this.authNotice) {
-        lines.push(row(fg(t.needsAuth, italic(this.authNotice))));
-        lines.push(emptyRow());
-      }
-    }
-
-    lines.push(divider());
-    lines.push(emptyRow());
-
-    if (this.confirmingDiscard) {
-      const discardBtn = this.discardSelected === 0
-        ? inverse(bold(fg(t.cancel, "  Discard  ")))
-        : fg(t.hint, "  Discard  ");
-      const keepBtn = this.discardSelected === 1
-        ? inverse(bold(fg(t.confirm, "  Keep  ")))
-        : fg(t.hint, "  Keep  ");
-      lines.push(row(`Discard unsaved changes?  ${discardBtn}   ${keepBtn}`));
-    } else {
-      if (this.authOnly) {
-        lines.push(row(fg(t.description, "select a server to authenticate")));
-      } else {
-        const directCount = this.servers.reduce((sum, s) => sum + s.tools.filter((t) => t.isDirect).length, 0);
-        const totalTokens = this.servers.reduce(
-          (sum, s) => sum + s.tools.filter((t) => t.isDirect).reduce((ts, t) => ts + t.estimatedTokens, 0),
-          0,
-        );
-        const stats =
-          directCount > 0 ? `${directCount} direct  ~${totalTokens.toLocaleString()} tokens` : "no direct tools";
-        lines.push(row(fg(t.description, stats + (this.dirty ? fg(t.needsAuth, "  (unsaved)") : ""))));
       }
     }
 
     lines.push(emptyRow());
-    const hints = this.authOnly
-      ? [
-          italic("↑↓") + " navigate",
-          italic("⏎") + " auth",
-          italic("ctrl+a") + " auth",
-          italic("esc") + " clear/close",
-          italic("ctrl+c") + " quit",
-        ]
-      : [
-          italic("↑↓") + " navigate",
-          italic("space") + " toggle",
-          italic("⏎") + " expand/auth",
-          italic("ctrl+a") + " auth",
-          italic("ctrl+r") + " reconnect",
-          italic("?") + " desc search",
-          italic("ctrl+s") + " save",
-          italic("esc") + " clear/close",
-          italic("ctrl+c") + " quit",
-        ];
-    const gap = "  ";
-    const gapW = 2;
-    const maxW = innerW - 2;
-    let curLine = "";
-    let curW = 0;
-    for (const hint of hints) {
-      const hw = visibleWidth(hint);
-      const needed = curW === 0 ? hw : gapW + hw;
-      if (curW > 0 && curW + needed > maxW) {
-        lines.push(row(fg(t.hint, curLine)));
-        curLine = hint;
-        curW = hw;
-      } else {
-        curLine += (curW > 0 ? gap : "") + hint;
-        curW += needed;
-      }
-    }
-    if (curLine) lines.push(row(fg(t.hint, curLine)));
+
+    const directCount = this.servers.reduce((sum, s) => sum + s.tools.filter((t) => t.isDirect).length, 0);
+    const totalTokens = this.servers.reduce(
+      (sum, s) => sum + s.tools.filter((t) => t.isDirect).reduce((ts, t) => ts + t.estimatedTokens, 0),
+      0,
+    );
+    const stats =
+      directCount > 0 ? `${directCount} direct  ~${totalTokens.toLocaleString()} tokens` : "no direct tools";
+    lines.push(row(fg(t.description, stats + (this.dirty ? fg(t.needsAuth, "  (unsaved)") : ""))));
 
     lines.push(fg(t.border, "╰" + "─".repeat(innerW) + "╯"));
 
