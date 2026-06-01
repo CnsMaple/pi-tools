@@ -4112,15 +4112,6 @@ export default function (pi: ExtensionAPI) {
     _cachedOptimizedResult = result;
 
     return result ?? {};
-    // where no stable candidate is long enough).
-    if (compressedPrompt !== strippedPrompt && compressedPrompt.trim().length > 0) {
-      return { systemPrompt: compressedPrompt };
-    }
-    if (strippedPrompt !== event.systemPrompt && strippedPrompt.trim().length > 0) {
-      return { systemPrompt: strippedPrompt };
-    }
-
-    return {};
   });
 
   pi.on("before_provider_request", (event, ctx) => {
