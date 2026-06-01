@@ -16,13 +16,29 @@
 
 ## 安装
 
+### 方式一：通过 packages 自动安装（推荐）
+
+在 `~/.pi/agent/settings.json` 中添加：
+
+```json
+{
+  "packages": [
+    "https://github.com/CnsMaple/pi-tools"
+  ]
+}
+```
+
+pi 会自动 clone 并加载此仓库的扩展。
+
+### 方式二：手动克隆
+
 ```bash
 git clone https://github.com/CnsMaple/pi-tools.git
 cd pi-tools
 npm install
 ```
 
-然后在 `~/.pi/agent/settings.json` 中添加：
+然后在 `~/.pi/agent/settings.json` 的 `pi.extensions` 中指向 `index.ts`：
 
 ```json
 {
@@ -34,7 +50,12 @@ npm install
 }
 ```
 
-或在 pi-tools 目录下直接运行 `pi`。
+### 方式三：进入目录直接运行
+
+```bash
+cd /path/to/pi-tools
+pi
+```
 
 ## License
 
