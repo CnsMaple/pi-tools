@@ -161,6 +161,7 @@ export default function mcpAdapter(pi: ExtensionAPI) {
       { label: "setup", value: "setup", description: "Setup wizard" },
       { label: "reconnect", value: "reconnect ", description: "Reconnect to a server" },
       { label: "logout", value: "logout ", description: "Logout from OAuth server" },
+      { label: "panel", value: "panel", description: "Open visual management panel" },
     ].filter(s => s.label.startsWith(prefix)),
     handler: async (args, ctx) => {
       if (!state && initPromise) {
@@ -206,18 +207,18 @@ export default function mcpAdapter(pi: ExtensionAPI) {
           await logoutServer(serverName, state, ctx);
           break;
         }
+        case "panel": {
+          const result = await openMcpPanel(state, pi, ctx, earlyConfigPath);
+          if (result?.configChanged) {
+            await ctx.reload();
+            return;
+          }
+          break;
+        }
         case "status":
         case "":
         default:
-          if (ctx.hasUI) {
-            const result = await openMcpPanel(state, pi, ctx, earlyConfigPath);
-            if (result?.configChanged) {
-              await ctx.reload();
-              return;
-            }
-          } else {
-            await showStatus(state, ctx);
-          }
+          await showStatus(state, ctx);
           break;
       }
     },
