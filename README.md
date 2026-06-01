@@ -13,6 +13,7 @@
 | [pi-rtk](https://github.com/mcowger/pi-rtk) | [npm](https://www.npmjs.com/package/pi-rtk) | RTK token 缩减，智能过滤工具输出 (8 种技术) | 同步 |
 | [pi-smart-fetch](https://github.com/Thinkscape/agent-smart-fetch) | [npm](https://www.npmjs.com/package/pi-smart-fetch) | 智能 web_fetch，浏览器级 TLS 指纹模拟 + Defuddle 提取 | 懒加载（首次调用） |
 | [rpiv-todo](https://github.com/buihongduc132/rpiv-todo) | [npm](https://www.npmjs.com/package/rpiv-todo) | TUI 任务看板 (`todo` 工具 + 覆盖层) | 同步 |
+| pi-continue | — | `/continue` 命令，继续被中断的响应 | 同步 |
 
 ## 安装
 
