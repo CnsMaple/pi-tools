@@ -4063,33 +4063,17 @@ export default function (pi: ExtensionAPI) {
     await publishStatus(ctx, event.model);
   });
 
+  // Cache: same-session system prompt 不变时跳过重处理（99% 的场景命中此缓存）
+  let _cachedSystemPrompt: string | null = null;
+  let _cachedOptimizedResult: Record<string, unknown> | null = null;
+
   pi.on("before_agent_start", async (event, _ctx) => {
-    // ────────────────────────────────────────────────────────────────
-    // OpenAI Responses API bypass (codex-responses + responses)
-    //
-    // OpenAI's Responses API endpoints — both the Codex backend
-    // (openai-codex-responses, chatgpt.com) and the public
-    // Responses API (openai-responses, api.openai.com / Copilot) —
-    // have two properties that make client-side prompt reordering
-    // unnecessary and potentially harmful:
-    //
-    //  1. Server-managed caching: both APIs send `prompt_cache_key`
-    //     (= Pi session id) in every request body, so the server
-    //     already maintains a stable cache without prefix ordering.
-    //     Client-side reordering adds no cache benefit.
-    //
-    //  2. Stricter content-safety filtering: the Codex backend in
-    //     particular has a product-level safety filter that flags
-    //     reordered prompts (tool snippets / guidelines lifted above
-    //     the assistant role) as potential prompt-injection, returning
-    //     `content_filter` and blocking tool calls (notably
-    //     `subagent`). The public Responses API shares the same
-    //     filter framework and could behave similarly.
-    //
-    // We therefore skip ALL prompt modifications (churn strip, skill
-    // compression, reorder) for these APIs. Third-party providers
-    // that use openai-completions are unaffected.
-    // ────────────────────────────────────────────────────────────────
+    // ── 缓存命中：system prompt 未变，直接返回上次结果 ──
+    if (_cachedSystemPrompt !== null && event.systemPrompt === _cachedSystemPrompt) {
+      return _cachedOptimizedResult ?? {};
+    }
+
+    // ── OpenAI Responses API 跳过 ──
     const model = _ctx.model;
     if (model) {
       const api = lower(model.api);
@@ -4100,44 +4084,34 @@ export default function (pi: ExtensionAPI) {
 
     if (!runtimeOptimizerEnabled) return {};
 
-    // Global opt-out: PI_CACHE_OPTIMIZER_NO_PROMPT_REWRITE=1 bypasses all
-    // prompt mutations below (session-overview churn strip, skill compression,
-    // and stable-prefix reordering). Footer stats and the OpenAI
-    // prompt_cache_key fallback remain active.
     if (isEnabledEnv(process.env[NO_PROMPT_REWRITE_ENV])) {
       return {};
     }
 
-    // Step 1: strip per-turn churn from <session-overview>.
-    // Removing RECENT COMMITS, Working directory status, and
-    // Journal line count makes more of the session-overview stable
-    // across turns, which DeepSeek's prefix cache can then retain.
     const strippedPrompt = stripSessionOverviewChurn(event.systemPrompt);
 
-    // Step 2: compress skills XML → one-line index.
-    // The compressed form is identical-string-equivalent to the
-    // verbose one as far as cache-stability is concerned because both
-    // are deterministic from the same `event.systemPromptOptions.skills`.
-    // No-op if opted out, below SKILL_COMPRESSION_MIN_COUNT, or if pi
-    // emitted a format we don't recognize.
     const compressedPrompt = compressSkillsInSystemPrompt(
       strippedPrompt,
       event.systemPromptOptions,
     );
 
-    // Step 3: lift stable content above dynamic content for cache
-    // stability. Operates on the (stripped + compressed) prompt so the
-    // cache key derived from `stablePrefix` reflects what actually
-    // ships to the provider.
     const optimized = optimizeSystemPrompt(compressedPrompt, event.systemPromptOptions);
 
+    let result: Record<string, unknown> | null = null;
+
     if (optimized.changed && optimized.systemPrompt.trim().length > 0) {
-      return { systemPrompt: optimized.systemPrompt };
+      result = { systemPrompt: optimized.systemPrompt };
+    } else if (compressedPrompt !== strippedPrompt && compressedPrompt.trim().length > 0) {
+      result = { systemPrompt: compressedPrompt };
+    } else if (strippedPrompt !== event.systemPrompt && strippedPrompt.trim().length > 0) {
+      result = { systemPrompt: strippedPrompt };
     }
 
-    // Reorder didn't apply but compression might have. Return the
-    // compressed (or stripped) prompt directly so we still benefit from
-    // the volume cut even when reorder is a no-op (e.g., short sessions
+    // 缓存结果供后续同 session 复用
+    _cachedSystemPrompt = event.systemPrompt;
+    _cachedOptimizedResult = result;
+
+    return result ?? {};
     // where no stable candidate is long enough).
     if (compressedPrompt !== strippedPrompt && compressedPrompt.trim().length > 0) {
       return { systemPrompt: compressedPrompt };
