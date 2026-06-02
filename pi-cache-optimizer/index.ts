@@ -3751,7 +3751,7 @@ export default function (pi: ExtensionAPI) {
   let currentSessionId = "";
   let currentSessionHash = "";
   let currentSessionHashSet = false;
-  const PERSIST_DEBOUNCE_MS = 2000;
+  const PERSIST_DEBOUNCE_MS = 30000;
   /** In-memory recent usage samples per model key (not persisted, cleared on reload). */
   const recentSamplesByModelKey = new Map<string, CacheUsageSample[]>();
 
@@ -4399,5 +4399,10 @@ export default function (pi: ExtensionAPI) {
         cmdCtx.ui.notify(diagnosis.join("\n"), "info");
       }
     },
+  });
+
+  // 退出时确保 stats 落盘（避免批量化后丢失最近的数据）
+  pi.on("session_shutdown", async () => {
+    await flushPersistCacheStats();
   });
 }
