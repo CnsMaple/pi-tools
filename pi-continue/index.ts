@@ -36,11 +36,13 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
+      ctx.ui.notify("Continuing...", "info");
+
       pi.sendMessage(
         {
           customType: "continue_trigger",
-          content: "Please continue from where you left off. Do not repeat what has already been written.",
-          display: true,
+          content: "Continue from where you left off.",
+          display: false,
         },
         { triggerTurn: true },
       );
