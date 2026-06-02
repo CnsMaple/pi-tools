@@ -36,8 +36,13 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      await ctx.sendUserMessage(
-        "Please continue from where you left off. Do not repeat what has already been written.",
+      pi.sendMessage(
+        {
+          customType: "continue_trigger",
+          content: "Please continue from where you left off. Do not repeat what has already been written.",
+          display: true,
+        },
+        { triggerTurn: true },
       );
 
       lastResponseWasInterrupted = false;
