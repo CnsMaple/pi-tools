@@ -15,22 +15,15 @@ import { Type } from "typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { loadConfig, DEFAULT_CONFIG, type RtkConfig } from "./config";
 import { trackSavings, getMetricsSummary, clearMetrics } from "./metrics";
-import {
-	stripAnsiFast,
-	truncate,
-	filterSourceCode,
-	detectLanguage,
-	filterBuildOutput,
-	isBuildCommand,
-	aggregateTestOutput,
-	isTestCommand,
-	aggregateLinterOutput,
-	isLinterCommand,
-	compactGitOutput,
-	isGitCommand,
-	groupSearchResults,
-	smartTruncate,
-} from "./techniques";
+
+// 技术模块懒加载，首次 tool_result 触发时才加载
+let techniquesCache: any = null;
+async function loadTechniques() {
+	if (!techniquesCache) {
+		techniquesCache = await import("./techniques");
+	}
+	return techniquesCache;
+}
 
 // Initialize with defaults immediately so tool_result handler works before session_start fires
 let config: RtkConfig = DEFAULT_CONFIG;
@@ -65,6 +58,8 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("tool_result", async (event, ctx) => {
 		if (!enabled) return;
+		// 懒加载技术模块
+		const t = await loadTechniques();
 		let technique = "";
 
 		// ── BASH ──────────────────────────────────────
@@ -79,39 +74,39 @@ export default function (pi: ExtensionAPI) {
 			let filteredText = originalText;
 
 			if (config.techniques.ansiStripping) {
-				const stripped = stripAnsiFast(filteredText);
+				const stripped = t.stripAnsiFast(filteredText);
 				if (stripped !== filteredText) {
 			filteredText = stripped;
 					technique = technique ? `${technique},ansi` : "ansi";
 			}
 			}
 
-			if (config.techniques.buildOutputFiltering && isBuildCommand(command)) {
-				const out = filterBuildOutput(filteredText, command);
+			if (config.techniques.buildOutputFiltering && t.isBuildCommand(command)) {
+				const out = t.filterBuildOutput(filteredText, command);
 				if (out !== null && out !== filteredText) {
 					filteredText = out;
 					technique = technique ? `${technique},build` : "build";
 				}
 			}
 
-			if (config.techniques.testOutputAggregation && isTestCommand(command)) {
-				const out = aggregateTestOutput(filteredText, command);
+			if (config.techniques.testOutputAggregation && t.isTestCommand(command)) {
+				const out = t.aggregateTestOutput(filteredText, command);
 				if (out !== null && out !== filteredText) {
 					filteredText = out;
 					technique = technique ? `${technique},test` : "test";
 				}
 			}
 
-			if (config.techniques.gitCompaction && isGitCommand(command)) {
-				const out = compactGitOutput(filteredText, command);
+			if (config.techniques.gitCompaction && t.isGitCommand(command)) {
+				const out = t.compactGitOutput(filteredText, command);
 		if (out !== null && out !== filteredText) {
 					filteredText = out;
 					technique = technique ? `${technique},git` : "git";
 				}
 			}
 
-			if (config.techniques.linterAggregation && isLinterCommand(command)) {
-				const out = aggregateLinterOutput(filteredText, command);
+			if (config.techniques.linterAggregation && t.isLinterCommand(command)) {
+				const out = t.aggregateLinterOutput(filteredText, command);
 				if (out !== null && out !== filteredText) {
 					filteredText = out;
 					technique = technique ? `${technique},linter` : "linter";
@@ -119,7 +114,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (config.techniques.truncation.enabled && filteredText.length > config.techniques.truncation.maxChars) {
-				filteredText = truncate(filteredText, config.techniques.truncation.maxChars);
+				filteredText = t.truncate(filteredText, config.techniques.truncation.maxChars);
 				technique = technique ? `${technique},truncate` : "truncate";
 			}
 
@@ -141,7 +136,7 @@ export default function (pi: ExtensionAPI) {
 		if (isReadToolResult(event)) {
 			const content = event.content;
 			const filePath = (event.input as { path?: string }).path || "";
-			const language = detectLanguage(filePath);
+			const language = t.detectLanguage(filePath);
 
 			const textItem = content?.find((c) => c.type === "text");
 			if (!textItem || !("text" in textItem)) return;
@@ -149,13 +144,13 @@ export default function (pi: ExtensionAPI) {
 			const originalText = textItem.text;
 
 		if (config.techniques.sourceCodeFiltering.enabled && language !== "unknown") {
-				let filteredText = filterSourceCode(originalText, language, config.techniques.sourceCodeFiltering.level);
+				let filteredText = t.filterSourceCode(originalText, language, config.techniques.sourceCodeFiltering.level);
 
 				if (
 					config.techniques.smartTruncation.enabled &&
 					filteredText.split("\n").length > config.techniques.smartTruncation.maxLines
 			) {
-					filteredText = smartTruncate(filteredText, config.techniques.smartTruncation.maxLines, language);
+					filteredText = t.smartTruncate(filteredText, config.techniques.smartTruncation.maxLines, language);
 					technique = "source+smart";
 				} else {
 				technique = "source";
@@ -185,7 +180,7 @@ export default function (pi: ExtensionAPI) {
 			if (!textItem || !("text" in textItem)) return;
 
 			const originalText = textItem.text;
-			const grouped = groupSearchResults(originalText);
+			const grouped = t.groupSearchResults(originalText);
 
 			if (grouped !== null && grouped !== originalText) {
 				const record = trackSavings(originalText, grouped, "grep", "search");

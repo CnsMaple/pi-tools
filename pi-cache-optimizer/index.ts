@@ -54,7 +54,7 @@ const STARTUP_CACHE_RETENTION_ENV = captureCacheRetentionEnv();
 // Automatically request long prompt-cache retention when Pi supports it.
 // /cache-optimizer disable restores the startup value for this Pi process.
 // ============================================================
-requestLongCacheRetention();
+// requestLongCacheRetention() moved into export default function (懒加载优化)
 
 type PiModel = NonNullable<ExtensionContext["model"]>;
 type UnknownRecord = Record<string, unknown>;
@@ -3737,6 +3737,8 @@ export const __internals_for_tests = {
 };
 
 export default function (pi: ExtensionAPI) {
+  requestLongCacheRetention();
+
   const warnedModels = new Set<string>();
   const promptCacheRetention400Models = new Set<string>();
   const warnedPromptCacheRetention400Models = new Set<string>();

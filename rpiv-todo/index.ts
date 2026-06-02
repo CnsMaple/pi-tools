@@ -12,10 +12,10 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { reconstructTodoState, registerTodosCommand, registerTodoTool, TOOL_NAME } from "./todo.js";
-import { TodoOverlay } from "./todo-overlay.js";
+import type { TodoOverlay } from "./todo-overlay.js";
 
 export default function (pi: ExtensionAPI) {
-	// Todo overlay widget — constructed lazily at the first session_start with UI.
+	// TodoOverlay is constructed lazily to avoid loading 221 lines on startup
 	let todoOverlay: TodoOverlay | undefined;
 
 	registerTodoTool(pi);
@@ -23,11 +23,12 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		reconstructTodoState(ctx);
-		if (ctx.hasUI) {
-			todoOverlay ??= new TodoOverlay();
+		if (ctx.hasUI && !todoOverlay) {
+			const { TodoOverlay: Overlay } = await import("./todo-overlay.js");
+			todoOverlay = new Overlay();
 			todoOverlay.setUICtx(ctx.ui);
-			todoOverlay.update();
 		}
+		todoOverlay?.update();
 	});
 
 	pi.on("session_compact", async (_event, ctx) => {
