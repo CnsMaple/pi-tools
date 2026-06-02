@@ -295,7 +295,7 @@ export default function piRetry(pi: ExtensionAPI) {
       }
 
       if (!lastResponseWasError) {
-        ctx.ui.notify("Nothing to retry — last response completed successfully.", "warning");
+        ctx.ui.notify("Nothing to retry — last response completed successfully.", "info");
         return;
       }
 

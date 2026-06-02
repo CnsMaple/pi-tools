@@ -32,7 +32,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (!lastResponseWasInterrupted) {
-        ctx.ui.notify("Nothing to continue — last response completed successfully.", "warning");
+        ctx.ui.notify("Nothing to continue — last response completed successfully.", "info");
         return;
       }
 
