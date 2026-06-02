@@ -7,7 +7,7 @@
 | 场景 | 耗时 |
 |------|------|
 | 无插件（裸 pi） | ~85ms |
-| 优化后（7 插件） | **~250ms** |
+| 优化后（7 插件 + 全部懒加载） | **~150ms** |
 | 优化前（静态 import） | ~5000ms |
 
 ## 包含的模块
@@ -57,7 +57,12 @@
 | 优化项 | 效果 |
 |------|------|
 | 并行动态 import | 插件模块通过 `Promise.all` 并发加载 |
-| MCP 适配器后台加载 | 43 文件 10K 行异步加载，不阻塞启动计时（~250ms vs ~980ms） |
+| MCP 适配器后台加载 | 43 文件 10K 行异步加载，不阻塞启动计时 |
+| pi-rtk techniques 懒加载 | 8 个过滤模块（~1400 行）首次 tool_result 才加载 |
+| rpiv-todo overlay 懒加载 | TodoOverlay 类（~220 行）首次 session_start 才加载 |
+| cache-optimizer 批量化 | 磁盘写入从 2s 防抖延长到 30s，减少 I/O |
+| smart-fetch 懒加载 | `wreq-js`（54MB）首次 web_fetch 调用才加载 |
+| TypeBox 去重 | 统一使用 `typebox`，消除 `@sinclair/typebox` 冗余依赖 |
 
 ## 安装
 
